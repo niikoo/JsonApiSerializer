@@ -1,4 +1,4 @@
-﻿namespace JsonApiSerializer.JsonApi.WellKnown
+namespace JsonApiSerializer.JsonApi.WellKnown
 {
     interface IResourceIdentifier<TResourceObject>
     {

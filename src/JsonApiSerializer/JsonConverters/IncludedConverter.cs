@@ -1,4 +1,4 @@
-﻿using JsonApiSerializer.SerializationState;
+using JsonApiSerializer.SerializationState;
 using JsonApiSerializer.Util;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;

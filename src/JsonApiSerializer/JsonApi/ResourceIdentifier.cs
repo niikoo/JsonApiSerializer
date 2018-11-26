@@ -1,4 +1,4 @@
-﻿using JsonApiSerializer.JsonApi.WellKnown;
+using JsonApiSerializer.JsonApi.WellKnown;
 using Newtonsoft.Json;
 
 namespace JsonApiSerializer.JsonApi

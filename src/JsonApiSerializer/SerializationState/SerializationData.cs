@@ -1,4 +1,4 @@
-﻿using JsonApiSerializer.Util;
+using JsonApiSerializer.Util;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
