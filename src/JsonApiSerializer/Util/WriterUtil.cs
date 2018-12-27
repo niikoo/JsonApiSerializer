@@ -6,7 +6,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 
 namespace JsonApiSerializer.Util
 {
@@ -27,15 +26,11 @@ namespace JsonApiSerializer.Util
         public static bool TryUseCustomConvertor(JsonWriter writer, object value, JsonSerializer serializer, JsonConverter excludeConverter)
         {
             // if they have custom convertors registered, we will respect them
-            for (var index = 0; index < serializer.Converters.Count; index++)
+            foreach (var converter in serializer.Converters)
             {
-                var converter = serializer.Converters[index];
-
-                if (converter != excludeConverter && converter.CanWrite && converter.CanConvert(value.GetType()))
-                {
-                    converter.WriteJson(writer, value, serializer);
-                    return true;
-                }
+                if (converter == excludeConverter || !converter.CanWrite || !converter.CanConvert(value.GetType())) continue;
+                converter.WriteJson(writer, value, serializer);
+                return true;
             }
 
             return false;
@@ -43,7 +38,7 @@ namespace JsonApiSerializer.Util
 
         public static string CalculateDefaultJsonApiType(object obj, SerializationData serializationData, JsonSerializer serializer)
         {
-            if (serializationData.ReferenceTypeNames.TryGetValue(obj, out string typeName))
+            if (serializationData.ReferenceTypeNames.TryGetValue(obj, out var typeName))
                 return typeName;
 
             var jsonApiType = CalculateDefaultJsonApiTypeFromObjectType(obj.GetType(), serializationData, serializer);
@@ -58,9 +53,8 @@ namespace JsonApiSerializer.Util
             // we need to check if either one was defined as a serializer, or if one was defined as
             // furher up the stack (i.e. a member converter)
 
-            for (var i = 0; i < serializer.Converters.Count; i++)
+            foreach (var converter in serializer.Converters)
             {
-                var converter = serializer.Converters[i];
                 if (converter is ResourceObjectConverter roc && converter.CanWrite && converter.CanConvert(objectType))
                 {
                     return roc.GenerateDefaultTypeNameInternal(objectType);
@@ -75,7 +69,7 @@ namespace JsonApiSerializer.Util
                 {
                     return defaultRoc.DefaultType;
                 }
-                else if (converter is ResourceObjectConverter roc)
+                if (converter is ResourceObjectConverter roc)
                 {
                     return roc.GenerateDefaultTypeNameInternal(objectType);
                 }

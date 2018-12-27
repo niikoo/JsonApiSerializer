@@ -49,7 +49,7 @@ namespace JsonApiSerializer.JsonConverters
                             .FirstOrDefault(x =>
                                 x.IsGenericType
                                 && x.GetGenericTypeDefinition() == typeof(IDocumentRoot<>));
-                        var dataType = documentRootInterfaceType.GenericTypeArguments[0];
+                        var dataType = documentRootInterfaceType?.GenericTypeArguments[0];
 
                         var dataObj = serializer.Deserialize(reader, dataType);
                         contract.Properties.GetClosestMatchProperty(PropertyNames.Data).ValueProvider.SetValue(rootObject, dataObj);
@@ -76,9 +76,9 @@ namespace JsonApiSerializer.JsonConverters
                 }
             }
 
-            for(var i=0; i< serializationData.PostProcessingActions.Count;i++)
+            foreach (var action in serializationData.PostProcessingActions)
             {
-                serializationData.PostProcessingActions[i]();
+                action();
             }
             serializationData.PostProcessingActions.Clear();
 
@@ -162,18 +162,19 @@ namespace JsonApiSerializer.JsonConverters
                 //output the included. If we have a specified included field we will out everything in there
                 //and we will also output all the references defined in our reference resolver
                 var referencesToInclude = serializationData.Included
-                    .Where(x => !serializationData.RenderedIncluded.Contains(x.Key)); //dont output values we have already output
+                    .Where(x => !serializationData.RenderedIncluded.Contains(x.Key)).ToList(); //dont output values we have already output
 
                 //if any other included have been explicitly mentioned we will output them as well
                 var includedProperty = contract.Properties.GetClosestMatchProperty(PropertyNames.Included);
                 var includedValues = includedProperty?.ValueProvider?.GetValue(value) as IEnumerable<object> ?? Enumerable.Empty<object>();
 
-                if (referencesToInclude.Any() || includedValues.Any())
+                var enumerable = includedValues.ToList();
+                if (referencesToInclude.Any() || enumerable.Any())
                 {
                     writer.WritePropertyName(PropertyNames.Included);
                     writer.WriteStartArray();
 
-                    foreach (var includedValue in includedValues)
+                    foreach (var includedValue in enumerable)
                         serializer.Serialize(writer, includedValue);
 
                     //I know we can alter the OrderedDictionary while enumerating it, otherwise this would error
@@ -186,9 +187,9 @@ namespace JsonApiSerializer.JsonConverters
 
             writer.WriteEndObject();
 
-            for (var i = 0; i < serializationData.PostProcessingActions.Count; i++)
+            foreach (var action in serializationData.PostProcessingActions)
             {
-                serializationData.PostProcessingActions[i]();
+                action();
             }
             serializationData.PostProcessingActions.Clear();
         }
@@ -197,8 +198,7 @@ namespace JsonApiSerializer.JsonConverters
         {
             //determine the error class type. The type passed in could be an array or an object
             //so we need to determine the error type for both
-            Type errorElementType;
-            if (!ListUtil.IsList(objectType, out errorElementType))
+            if (!ListUtil.IsList(objectType, out var errorElementType))
                 errorElementType = objectType;
 
             //we do not have a root object, so this is probably the entry point, so we will resolve

@@ -7,7 +7,6 @@ using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace JsonApiSerializer.Util
 {
@@ -23,7 +22,7 @@ namespace JsonApiSerializer.Util
             var lookAheadReader = reader.Fork();
             string id = null;
             string type = null;
-            foreach (var propName in ReaderUtil.IterateProperties(lookAheadReader))
+            foreach (var propName in IterateProperties(lookAheadReader))
             {
                 if (propName == PropertyNames.Id)
                 {
@@ -129,6 +128,7 @@ namespace JsonApiSerializer.Util
         /// <param name="obj"></param>
         /// <param name="property"></param>
         /// <param name="value"></param>
+        /// <param name="overrideConverter"></param>
         /// <returns><c>True</c> if the property could be set otherwise <c>false</c></returns>
         public static bool TryPopulateProperty(JsonSerializer serializer, object obj, JsonProperty property, JsonReader value, JsonConverter overrideConverter = null)
         {
@@ -142,9 +142,9 @@ namespace JsonApiSerializer.Util
             {
                 propValue = overrideConverter.ReadJson(value, property.PropertyType, null, serializer);
             }
-            else if (property.MemberConverter != null && property.MemberConverter.CanRead)
+            else if (property.Converter != null && property.Converter.CanRead)
             {
-                propValue = property.MemberConverter.ReadJson(value, property.PropertyType, null, serializer);
+                propValue = property.Converter.ReadJson(value, property.PropertyType, null, serializer);
             }
             else
             {
@@ -185,7 +185,7 @@ namespace JsonApiSerializer.Util
             }
         }
 
-        public static string ReadUntilStart(JsonReader reader, string pathEndsWith)
+        public static string ReadUntilEndsWith(JsonReader reader, string pathEndsWith)
         {
             var startPath = reader.Path;
 
@@ -244,15 +244,11 @@ namespace JsonApiSerializer.Util
 
         public static bool TryUseCustomConvertor(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer, JsonConverter excludeConverter, out object value)
         {
-            for (var index = 0; index < serializer.Converters.Count; index++)
+            foreach (var converter in serializer.Converters)
             {
-                var converter = serializer.Converters[index];
-
-                if (converter != excludeConverter && converter.CanRead && converter.CanConvert(objectType))
-                {
-                    value = converter.ReadJson(reader, objectType, existingValue, serializer);
-                    return true;
-                }
+                if (converter == excludeConverter || !converter.CanRead || !converter.CanConvert(objectType)) continue;
+                value = converter.ReadJson(reader, objectType, existingValue, serializer);
+                return true;
             }
             value = default(object);
             return false;
@@ -264,9 +260,8 @@ namespace JsonApiSerializer.Util
             // we need to check if either one was defined as a serializer, or if one was defined as
             // furher up the stack (i.e. a member converter)
 
-            for (var i = 0; i < serializer.Converters.Count; i++)
+            foreach (var converter in serializer.Converters)
             {
-                var converter = serializer.Converters[i];
                 if (converter is ResourceObjectConverter roc && converter.CanRead && converter.CanConvert(objectType))
                 {
                     return roc.CreateObjectInternal(objectType, jsonApiType, serializer);

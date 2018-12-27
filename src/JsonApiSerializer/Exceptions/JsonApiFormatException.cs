@@ -12,8 +12,8 @@ namespace JsonApiSerializer.Exceptions
         public JsonApiFormatException(string path, string message, string specificationInformation) 
             : base(ConcatSentence(message, specificationInformation))
         {
-            this.Path = path;
-            this.SpecificationInformation = specificationInformation;
+            Path = path;
+            SpecificationInformation = specificationInformation;
         }
 
         public JsonApiFormatException(string path, string message) 

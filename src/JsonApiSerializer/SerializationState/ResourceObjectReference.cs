@@ -15,20 +15,11 @@ namespace JsonApiSerializer.SerializationState
             Type = type;
         }
 
-        public override string ToString()
-        {
-            return Id + ":" + Type;
-        }
+        public override string ToString() => Id + ":" + Type;
 
-        public bool Equals(ResourceObjectReference other)
-        {
-            return other.Id == Id && other.Type == Type;
-        }
+        public bool Equals(ResourceObjectReference other) => other.Id == Id && other.Type == Type;
 
-        public override bool Equals(object obj)
-        {
-            return obj is ResourceObjectReference reference && Equals(reference);
-        }
+        public override bool Equals(object obj) => obj is ResourceObjectReference reference && Equals(reference);
 
         public override int GetHashCode()
         {

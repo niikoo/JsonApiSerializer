@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using JsonApiSerializer.JsonApi.WellKnown;
 using JsonApiSerializer.SerializationState;
 using JsonApiSerializer.Util;
 using Newtonsoft.Json;
@@ -10,16 +9,9 @@ namespace JsonApiSerializer.JsonConverters
 {
     internal class ErrorListConverter : JsonConverter
     {
-        public static bool CanConvertStatic(Type objectType)
-        {
-            Type elementType;
-            return ListUtil.IsList(objectType, out elementType) && ErrorConverter.CanConvertStatic(elementType);
-        }
+        public static bool CanConvertStatic(Type objectType) => ListUtil.IsList(objectType, out var elementType) && ErrorConverter.CanConvertStatic(elementType);
 
-        public override bool CanConvert(Type objectType)
-        {
-            return CanConvertStatic(objectType);
-        }
+        public override bool CanConvert(Type objectType) => CanConvertStatic(objectType);
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
@@ -31,8 +23,7 @@ namespace JsonApiSerializer.JsonConverters
                 return ListUtil.CreateList(objectType, errors);
             }
 
-            Type elementType;
-            ListUtil.IsList(objectType, out elementType);
+            ListUtil.IsList(objectType, out var elementType);
 
             return ListUtil.CreateList(objectType,
                 ReaderUtil.IterateList(reader)

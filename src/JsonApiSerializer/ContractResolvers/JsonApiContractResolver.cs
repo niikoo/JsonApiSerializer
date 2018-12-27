@@ -25,7 +25,7 @@ namespace JsonApiSerializer.ContractResolvers
             ResourceIdentifierConverter = new ResourceIdentifierConverter(ResourceObjectConverter.CanConvert);
             ResourceRelationshipConverter = new ResourceRelationshipConverter(ResourceIdentifierConverter.CanConvert);
             
-            this.NamingStrategy = new CamelCaseNamingStrategy();
+            NamingStrategy = new CamelCaseNamingStrategy();
         }
 
         public JsonApiContractResolver()
@@ -66,9 +66,7 @@ namespace JsonApiSerializer.ContractResolvers
                 return new ResourceIdentifierContract(contract);
             if (ResourceObjectConverter.CanConvert(objectType))
                 return new ResourceObjectContract(contract, ResourceRelationshipConverter.CanConvert);
-            if (ResourceRelationshipConverter.IsExplicitRelationship(objectType))
-                return new ResourceRelationshipContract(contract);
-            return contract;
+            return ResourceRelationshipConverter.IsExplicitRelationship(objectType) ? new ResourceRelationshipContract(contract) : contract;
         }
 
     }

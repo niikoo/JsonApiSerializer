@@ -4,18 +4,17 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using JsonApiSerializer.Util.JsonApiConverter.Util;
 using System;
-using Newtonsoft.Json.Linq;
 
 namespace JsonApiSerializer.SerializationState
 {
     internal class SerializationData
     {
-        private static ConditionalWeakTable<object, SerializationData> _perSerializationData = new ConditionalWeakTable<object, SerializationData>();
+        private static readonly ConditionalWeakTable<object, SerializationData> PerSerializationData = new ConditionalWeakTable<object, SerializationData>();
 
         public static SerializationData GetSerializationData(JsonWriter writer)
         {
             object token = writer;
-            return _perSerializationData.GetOrCreateValue(token);
+            return PerSerializationData.GetOrCreateValue(token);
         }
 
         public static SerializationData GetSerializationData(JsonReader reader)
@@ -23,7 +22,7 @@ namespace JsonApiSerializer.SerializationState
             object token = reader;
             if (reader is ForkableJsonReader forkableReader)
                 token = forkableReader.SerializationDataToken;
-            return _perSerializationData.GetOrCreateValue(token);
+            return PerSerializationData.GetOrCreateValue(token);
         }
 
         /// <summary>

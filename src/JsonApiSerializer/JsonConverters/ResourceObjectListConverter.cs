@@ -1,5 +1,4 @@
-﻿using JsonApiSerializer.ContractResolvers;
-using JsonApiSerializer.ContractResolvers.Contracts;
+﻿using JsonApiSerializer.ContractResolvers.Contracts;
 using JsonApiSerializer.Exceptions;
 using JsonApiSerializer.JsonApi.WellKnown;
 using JsonApiSerializer.SerializationState;
@@ -8,7 +7,6 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace JsonApiSerializer.JsonConverters
 {
@@ -23,7 +21,7 @@ namespace JsonApiSerializer.JsonConverters
 
         public static bool CanConvertStatic(Type objectType, JsonConverter elementConvertor)
         {
-            return ListUtil.IsList(objectType, out Type elementType) 
+            return ListUtil.IsList(objectType, out var elementType) 
                 && elementConvertor.CanConvert(elementType);
         }
 
@@ -38,12 +36,18 @@ namespace JsonApiSerializer.JsonConverters
             if (!serializationData.HasProcessedDocumentRoot)
                 return DocumentRootConverter.ResolveAsRootData(reader, objectType, serializer);
 
+            //read into the 'Data' path
+            var preDataPath = ReaderUtil.ReadUntilEndsWith(reader, PropertyNames.Data);
+
             //we should be dealing with list types, but we also want the element type
-            if (!ListUtil.IsList(objectType, out Type elementType))
+            if (!ListUtil.IsList(objectType, out var elementType))
                 throw new ArgumentException($"{typeof(ResourceObjectListConverter)} can only read json lists", nameof(objectType));
 
             var itemsIterator = ReaderUtil.IterateList(reader).Select(x => serializer.Deserialize(reader, elementType));
             var list = ListUtil.CreateList(objectType, itemsIterator);
+
+            //read out of the 'Data' path
+            ReaderUtil.ReadUntilEnd(reader, preDataPath);
 
             return list;
         }

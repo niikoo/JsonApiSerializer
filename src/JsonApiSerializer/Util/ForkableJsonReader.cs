@@ -10,14 +10,9 @@ namespace JsonApiSerializer.Util
         
         protected readonly string ParentPath;
 
-        private JsonReaderState ReaderState;
+        private JsonReaderState _readerState;
 
-        public string FullPath {
-            get
-            {
-                return (ParentPath + "." + Path).Trim('.');
-            }
-        }
+        public string FullPath => (ParentPath + "." + Path).Trim('.');
 
         public ForkableJsonReader(JsonReader reader) 
             : this(reader, new JsonReaderState(reader.TokenType, reader.Value), reader)
@@ -33,36 +28,36 @@ namespace JsonApiSerializer.Util
 
         private ForkableJsonReader(JsonReader reader, JsonReaderState state, object serializationDataToken)
         {
-            this.InnerReader = reader;
-            this.ParentPath = reader.Path;
-            this.SetToken(state.Token, state.Value);
-            this.ReaderState = state;
-            this.SerializationDataToken = serializationDataToken;
+            InnerReader = reader;
+            ParentPath = reader.Path;
+            SetToken(state.Token, state.Value);
+            _readerState = state;
+            SerializationDataToken = serializationDataToken;
         }
 
 
 
         public override bool Read()
         {
-            if(ReaderState.Next != null)
+            if(_readerState.Next != null)
             {
-                ReaderState = ReaderState.Next;
-                this.SetToken(ReaderState.Token, ReaderState.Value);
+                _readerState = _readerState.Next;
+                SetToken(_readerState.Token, _readerState.Value);
                 return true;
             }
             else
             {
                 var result = InnerReader.Read();
-                this.SetToken(InnerReader.TokenType, InnerReader.Value);
-                ReaderState.Next = new JsonReaderState(this.TokenType, this.Value);
-                ReaderState = ReaderState.Next;
+                SetToken(InnerReader.TokenType, InnerReader.Value);
+                _readerState.Next = new JsonReaderState(TokenType, Value);
+                _readerState = _readerState.Next;
                 return result;
             }
         }
 
         public ForkableJsonReader Fork()
         {
-            return new ForkableJsonReader(this.InnerReader, this.ReaderState, this.SerializationDataToken);
+            return new ForkableJsonReader(InnerReader, _readerState, SerializationDataToken);
         }
 
      
@@ -75,8 +70,8 @@ namespace JsonApiSerializer.Util
 
             public JsonReaderState(JsonToken token, object value)
             {
-                this.Token = token;
-                this.Value = value;
+                Token = token;
+                Value = value;
             }
         }
     }

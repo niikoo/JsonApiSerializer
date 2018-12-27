@@ -10,15 +10,9 @@ namespace JsonApiSerializer.JsonConverters
 {
     internal class LinkConverter : JsonConverter
     {
-        public static bool CanConvertStatic(Type objectType)
-        {
-            return typeof(ILink).GetTypeInfo().IsAssignableFrom(objectType.GetTypeInfo());
-        }
+        public static bool CanConvertStatic(Type objectType) => typeof(ILink).GetTypeInfo().IsAssignableFrom(objectType.GetTypeInfo());
 
-        public override bool CanConvert(Type objectType)
-        {
-            return CanConvertStatic(objectType);
-        }
+        public override bool CanConvert(Type objectType) => CanConvertStatic(objectType);
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {

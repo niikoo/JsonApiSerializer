@@ -1,19 +1,14 @@
 ﻿using JsonApiSerializer.ContractResolvers;
 using JsonApiSerializer.ContractResolvers.Contracts;
 using JsonApiSerializer.Exceptions;
-using JsonApiSerializer.JsonApi;
 using JsonApiSerializer.JsonApi.WellKnown;
-using JsonApiSerializer.JsonConverters;
 using JsonApiSerializer.SerializationState;
 using JsonApiSerializer.Util;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace JsonApiSerializer.JsonConverters
@@ -21,7 +16,7 @@ namespace JsonApiSerializer.JsonConverters
     /// <summary>
     /// Provides functionality to convert a JsonApi resource object into a .NET object
     /// </summary>
-    /// <seealso cref="Newtonsoft.Json.JsonConverter" />
+    /// <seealso cref="JsonConverter" />
     public class ResourceObjectConverter : JsonConverter
     {
         private static readonly Regex DataReadPathRegex = new Regex($@"^$|{PropertyNames.Included}(\[\d+\])?$|{"data"}(\[\d+\])?$");
@@ -38,7 +33,7 @@ namespace JsonApiSerializer.JsonConverters
             if (!serializationData.HasProcessedDocumentRoot)
                 return DocumentRootConverter.ResolveAsRootData(reader, objectType, serializer);
 
-            if (ReaderUtil.TryUseCustomConvertor(reader, objectType, existingValue, serializer, this, out object customConvertedValue))
+            if (ReaderUtil.TryUseCustomConvertor(reader, objectType, existingValue, serializer, this, out var customConvertedValue))
                 return customConvertedValue;
 
             //if the value has been explicitly set to null then the value of the element is simply null
@@ -57,7 +52,7 @@ namespace JsonApiSerializer.JsonConverters
             existingValue = existingValue ?? CreateObject(objectType, reference.Type, serializer);
 
 
-            JsonContract rawContract = contractResolver.ResolveContract(existingValue.GetType());
+            var rawContract = contractResolver.ResolveContract(existingValue.GetType());
             if (!(rawContract is JsonObjectContract contract))
                 throw new JsonApiFormatException(
                    forkableReader.FullPath,
@@ -88,32 +83,25 @@ namespace JsonApiSerializer.JsonConverters
                 }
 
                 //flatten out relationships onto the object
-                if (!successfullyPopulateProperty && propName == PropertyNames.Relationships)
+                if (successfullyPopulateProperty || propName != PropertyNames.Relationships) continue;
                 {
                     foreach (var innerPropName in ReaderUtil.IterateProperties(reader))
                     {
                         var prop = contract.Properties.GetClosestMatchProperty(innerPropName);
                         if (prop == null)
                             continue;
-
-                        // This is a massive hack. MemberConverters used to work and allowed
-                        // modifying a members create object. Unfortunatly Resource Identifiers
-                        // are no longer created by this object converter. We are passing the
-                        // convertor via the serialization data so ResourceIdentifierConverter
-                        // can access it down the line.
-                        // next breaking change remove support for ResourceObjectConverter 
-                        // member converters
-                        if (prop.MemberConverter != null)
-                            serializationData.ConverterStack.Push(prop.MemberConverter);
+                        
+                        if (prop.Converter != null)
+                            serializationData.ConverterStack.Push(prop.Converter);
 
                         ReaderUtil.TryPopulateProperty(
-                          serializer,
-                          existingValue,
-                          contract.Properties.GetClosestMatchProperty(innerPropName),
-                          reader,
-                          overrideConverter: contractResolver.ResourceRelationshipConverter);
+                            serializer,
+                            existingValue,
+                            contract.Properties.GetClosestMatchProperty(innerPropName),
+                            reader,
+                            contractResolver.ResourceRelationshipConverter);
 
-                        if (prop.MemberConverter != null)
+                        if (prop.Converter != null)
                             serializationData.ConverterStack.Pop();
                     }
                 }
@@ -162,7 +150,7 @@ namespace JsonApiSerializer.JsonConverters
             }
 
             //serialize type. Will always out put a type
-            WriterUtil.ShouldWriteProperty<string>(value, metadata.TypeProperty, serializer, out string type);
+            WriterUtil.ShouldWriteProperty<string>(value, metadata.TypeProperty, serializer, out var type);
             type = type ?? WriterUtil.CalculateDefaultJsonApiType(value, serializationData, serializer);
             writer.WritePropertyName(PropertyNames.Type);
             writer.WriteValue(type);
@@ -188,56 +176,52 @@ namespace JsonApiSerializer.JsonConverters
 
             //serialize attributes
             var startedAttributeSection = false;
-            for (var i = 0; i < metadata.Attributes.Length; i++)
+            foreach (var attributeProperty in metadata.Attributes)
             {
-                var attributeProperty = metadata.Attributes[i];
-                if (WriterUtil.ShouldWriteProperty(value, attributeProperty, serializer, out object attributeValue))
+                if (!WriterUtil.ShouldWriteProperty(value, attributeProperty, serializer, out object attributeValue)) continue;
+                // some relationships are not decalred as such. They exist in properties
+                // with declared types of `object` but the runtime object within is a
+                // relationship. We will check here if this attribute property is really
+                // a relationship, and if it is store it to process later
+
+                // NOTE: this behviour it leads to nulls being inconsistantly attribute/relationship.
+                // leaving in for backward compatability but remove on next breaking change
+                var attributeValueType = attributeValue?.GetType();
+                if (attributeValueType != null
+                    && attributeProperty.PropertyType != attributeValueType
+                    && jsonApiContractResolver.ResourceRelationshipConverter.CanConvert(attributeValueType))
                 {
-                    // some relationships are not decalred as such. They exist in properties
-                    // with declared types of `object` but the runtime object within is a
-                    // relationship. We will check here if this attribute property is really
-                    // a relationship, and if it is store it to process later
+                    undeclaredRelationships = undeclaredRelationships ?? new List<KeyValuePair<JsonProperty, object>>();
+                    undeclaredRelationships.Add(new KeyValuePair<JsonProperty, object>(attributeProperty, attributeValue));
+                    continue;
+                }
 
-                    // NOTE: this behviour it leads to nulls being inconsistantly attribute/relationship.
-                    // leaving in for backward compatability but remove on next breaking change
-                    var attributeValueType = attributeValue?.GetType();
-                    if (attributeValueType != null
-                        && attributeProperty.PropertyType != attributeValueType
-                        && jsonApiContractResolver.ResourceRelationshipConverter.CanConvert(attributeValueType))
-                    {
-                        undeclaredRelationships = undeclaredRelationships ?? new List<KeyValuePair<JsonProperty, object>>();
-                        undeclaredRelationships.Add(new KeyValuePair<JsonProperty, object>(attributeProperty, attributeValue));
-                        continue;
-                    }
-
-                    //serialize out the attribute
-                    if (!startedAttributeSection)
-                    {
-                        startedAttributeSection = true;
-                        writer.WritePropertyName(PropertyNames.Attributes);
-                        writer.WriteStartObject();
-                    }
-                    writer.WritePropertyName(attributeProperty.PropertyName);
-                    if (attributeProperty.MemberConverter?.CanWrite == true)
-                    {
-                        attributeProperty.MemberConverter.WriteJson(writer, attributeValue, serializer);
-                    }
-                    else if (attributeValue is string attributeString)
-                    {
+                //serialize out the attribute
+                if (!startedAttributeSection)
+                {
+                    startedAttributeSection = true;
+                    writer.WritePropertyName(PropertyNames.Attributes);
+                    writer.WriteStartObject();
+                }
+                writer.WritePropertyName(attributeProperty.PropertyName);
+                if (attributeProperty.Converter?.CanWrite == true)
+                {
+                    attributeProperty.Converter.WriteJson(writer, attributeValue, serializer);
+                }
+                else switch (attributeValue)
+                {
+                    case string attributeString:
                         writer.WriteValue(attributeString);
-                    }
-                    else if (attributeValue is bool attributeBool)
-                    {
+                        break;
+                    case bool attributeBool:
                         writer.WriteValue(attributeBool);
-                    }
-                    else if (attributeValue is int attributeInt)
-                    {
+                        break;
+                    case int attributeInt:
                         writer.WriteValue(attributeValue);
-                    }
-                    else
-                    {
+                        break;
+                    default:
                         serializer.Serialize(writer, attributeValue);
-                    }
+                        break;
                 }
             }
             if (startedAttributeSection)
@@ -258,8 +242,8 @@ namespace JsonApiSerializer.JsonConverters
                     writer.WriteStartObject();
                 }
 
-                if (relationshipProperty.MemberConverter != null)
-                    serializationData.ConverterStack.Push(relationshipProperty.MemberConverter);
+                if (relationshipProperty.Converter != null)
+                    serializationData.ConverterStack.Push(relationshipProperty.Converter);
 
                 writer.WritePropertyName(relationshipProperty.PropertyName);
                 jsonApiContractResolver.ResourceRelationshipConverter.WriteNullableJson(
@@ -268,37 +252,34 @@ namespace JsonApiSerializer.JsonConverters
                     relationshipValue,
                     serializer);
 
-                if (relationshipProperty.MemberConverter != null)
+                if (relationshipProperty.Converter != null)
                     serializationData.ConverterStack.Pop();
 
             }
 
             //then go through the ones we know to be relationships
-            for (var i = 0; i < metadata.Relationships.Length; i++)
+            foreach (var relationshipProperty in metadata.Relationships)
             {
-                var relationshipProperty = metadata.Relationships[i];
-                if (WriterUtil.ShouldWriteProperty(value, relationshipProperty, serializer, out object relationshipValue))
+                if (!WriterUtil.ShouldWriteProperty(value, relationshipProperty, serializer, out object relationshipValue)) continue;
+                if (!startedRelationshipSection)
                 {
-                    if (!startedRelationshipSection)
-                    {
-                        startedRelationshipSection = true;
-                        writer.WritePropertyName(PropertyNames.Relationships);
-                        writer.WriteStartObject();
-                    }
-
-                    if (relationshipProperty.MemberConverter != null)
-                        serializationData.ConverterStack.Push(relationshipProperty.MemberConverter);
-
-                    writer.WritePropertyName(relationshipProperty.PropertyName);
-                    jsonApiContractResolver.ResourceRelationshipConverter.WriteNullableJson(
-                        writer,
-                        relationshipProperty.PropertyType,
-                        relationshipValue,
-                        serializer);
-
-                    if (relationshipProperty.MemberConverter != null)
-                        serializationData.ConverterStack.Pop();
+                    startedRelationshipSection = true;
+                    writer.WritePropertyName(PropertyNames.Relationships);
+                    writer.WriteStartObject();
                 }
+
+                if (relationshipProperty.Converter != null)
+                    serializationData.ConverterStack.Push(relationshipProperty.Converter);
+
+                writer.WritePropertyName(relationshipProperty.PropertyName);
+                jsonApiContractResolver.ResourceRelationshipConverter.WriteNullableJson(
+                    writer,
+                    relationshipProperty.PropertyType,
+                    relationshipValue,
+                    serializer);
+
+                if (relationshipProperty.Converter != null)
+                    serializationData.ConverterStack.Pop();
             }
             if (startedRelationshipSection)
                 writer.WriteEndObject();
@@ -321,15 +302,9 @@ namespace JsonApiSerializer.JsonConverters
         /// </summary>
         /// <param name="type"></param>
         /// <returns></returns>
-        protected virtual string GenerateDefaultTypeName(Type type)
-        {
-            return type.Name.ToLowerInvariant();
-        }
+        protected virtual string GenerateDefaultTypeName(Type type) => type.Name.ToLowerInvariant();
 
-        internal string GenerateDefaultTypeNameInternal(Type type)
-        {
-            return GenerateDefaultTypeName(type);
-        }
+        internal string GenerateDefaultTypeNameInternal(Type type) => GenerateDefaultTypeName(type);
 
         /// <summary>
         /// Exposes contract to allow overriding object initialisation based on resource type during deserialization.
@@ -342,25 +317,15 @@ namespace JsonApiSerializer.JsonConverters
         protected virtual object CreateObject(Type objectType, string jsonapiType, JsonSerializer serializer)
         {
             var contract = serializer.ContractResolver.ResolveContract(objectType);
-            if (contract.DefaultCreator == null)
-            {
-                var typeInfo = objectType.GetTypeInfo();
-                if (typeInfo.IsInterface)
-                    throw new JsonSerializationException($"Could not create an instance of type {objectType}. Type is an interface and cannot be instantiated.");
-                else if (typeInfo.IsAbstract)
-                    throw new JsonSerializationException($"Could not create an instance of type {objectType}. Type is an abstract class and cannot be instantiated.");
-                else
-                    throw new JsonSerializationException($"Could not create an instance of type {objectType}.");
-            }
-
-            return contract.DefaultCreator();
+            if (contract.DefaultCreator != null) return contract.DefaultCreator();
+            var typeInfo = objectType.GetTypeInfo();
+            if (typeInfo.IsInterface)
+                throw new JsonSerializationException($"Could not create an instance of type {objectType}. Type is an interface and cannot be instantiated.");
+            if (typeInfo.IsAbstract)
+                throw new JsonSerializationException($"Could not create an instance of type {objectType}. Type is an abstract class and cannot be instantiated.");
+            throw new JsonSerializationException($"Could not create an instance of type {objectType}.");
         }
 
-        internal object CreateObjectInternal(Type objectType, string jsonapiType, JsonSerializer serializer)
-        {
-            return this.CreateObject(objectType, jsonapiType, serializer);
-        }
-
-        
+        internal object CreateObjectInternal(Type objectType, string jsonapiType, JsonSerializer serializer) => CreateObject(objectType, jsonapiType, serializer);
     }
 }

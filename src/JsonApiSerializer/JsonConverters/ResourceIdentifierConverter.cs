@@ -11,31 +11,30 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 
 namespace JsonApiSerializer.JsonConverters
 {
     internal class ResourceIdentifierConverter : JsonConverter
     {
-        private readonly Func<Type, bool> isResourceObject;
+        private readonly Func<Type, bool> _isResourceObject;
 
 
         public ResourceIdentifierConverter(Func<Type, bool> isResourceObject)
         {
-            this.isResourceObject = isResourceObject;
+            _isResourceObject = isResourceObject;
         }
 
         public override bool CanConvert(Type objectType)
         {
-            return isResourceObject(objectType)
-                || IsArrayOf(objectType, isResourceObject)
+            return _isResourceObject(objectType)
+                || IsArrayOf(objectType, _isResourceObject)
                 || IsExplicitResourceIdentifier(objectType)
                 || IsArrayOf(objectType, IsExplicitResourceIdentifier);
         }
 
-        private bool IsArrayOf(Type type , Func<Type, bool> elementTypeCheck)
+        private static bool IsArrayOf(Type type, Func<Type, bool> elementTypeCheck)
         {
-            return ListUtil.IsList(type, out Type elementType) 
+            return ListUtil.IsList(type, out var elementType) 
                 && elementTypeCheck(elementType);
         }
 
@@ -135,7 +134,7 @@ namespace JsonApiSerializer.JsonConverters
             }
         }
 
-        private void WriteExplicitIdentifierJson(JsonWriter writer, object value, JsonSerializer serializer)
+        private static void WriteExplicitIdentifierJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
             var serializationData = SerializationData.GetSerializationData(writer);
 
@@ -166,9 +165,8 @@ namespace JsonApiSerializer.JsonConverters
             writer.WritePropertyName(PropertyNames.Type);
             writer.WriteValue(type);
 
-            for(var i=0; i < resourceIdentifierContract.Properties.Count; i++)
+            foreach (var resourceIdentifierProp in resourceIdentifierContract.Properties)
             {
-                var resourceIdentifierProp = resourceIdentifierContract.Properties[i];
                 if (resourceIdentifierProp == resourceIdentifierContract.ResourceObjectProperty)
                     continue;
                 switch (resourceIdentifierProp.PropertyName)
@@ -183,7 +181,7 @@ namespace JsonApiSerializer.JsonConverters
                             serializer.Serialize(writer, propValue);
                         }
                         break;
-               }
+                }
             }
 
             writer.WriteEndObject();
@@ -206,9 +204,7 @@ namespace JsonApiSerializer.JsonConverters
                 case ResourceIdentifierContract ric:
                     return ReadJsonAsExplicitResourceIdentifier(forkableReader, objectType, serializer);
                 case JsonArrayContract jac when forkableReader.TokenType == JsonToken.StartArray:
-                    var list = new List<object>();
-                    foreach (var item in ReaderUtil.IterateList(forkableReader))
-                        list.Add(ReadJson(forkableReader, jac.CollectionItemType, null, serializer));
+                    var list = ReaderUtil.IterateList(forkableReader).Select(item => ReadJson(forkableReader, jac.CollectionItemType, null, serializer)).ToList();
                     return ListUtil.CreateList(objectType, list);
                 default:
                     return serializer.Deserialize(reader, objectType);
@@ -221,7 +217,7 @@ namespace JsonApiSerializer.JsonConverters
 
         private object ReadJsonAsExplicitResourceIdentifier(ForkableJsonReader reader, Type objectType, JsonSerializer serializer)
         {
-            if (ReaderUtil.TryUseCustomConvertor(reader, objectType, null, serializer, this, out object customConvertedValue))
+            if (ReaderUtil.TryUseCustomConvertor(reader, objectType, null, serializer, this, out var customConvertedValue))
                 return customConvertedValue;
 
             // if the value has been explicitly set to null then the value of the element is simply null
@@ -273,7 +269,7 @@ namespace JsonApiSerializer.JsonConverters
 
             var reference = ReaderUtil.ReadAheadToIdentifyObject(reader);
 
-            if (serializationData.Included.TryGetValue(reference, out object resourceObject))
+            if (serializationData.Included.TryGetValue(reference, out var resourceObject))
             {
                 if (resourceObject is JObject resoruceObjectJObject)
                 {
