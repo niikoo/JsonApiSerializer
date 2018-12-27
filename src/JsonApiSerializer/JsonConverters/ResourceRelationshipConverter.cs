@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System;
 using System.Reflection;
+using JsonApiSerializer.Exceptions;
 
 namespace JsonApiSerializer.JsonConverters
 {
@@ -164,7 +165,7 @@ namespace JsonApiSerializer.JsonConverters
                            obj,
                            rrc.Properties.GetClosestMatchProperty(propName),
                            reader,
-                           overrideConverter: jsonApiContractResolver.ResourceIdentifierConverter);
+                           jsonApiContractResolver.ResourceIdentifierConverter);
                         break;
                     default:
                         ReaderUtil.TryPopulateProperty(
@@ -198,8 +199,6 @@ namespace JsonApiSerializer.JsonConverters
                     case PropertyNames.Links:
                     case PropertyNames.Meta:
                         isValid = true;
-                        break;
-                    default:
                         break;
                 }
             }

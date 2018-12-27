@@ -16,7 +16,4 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
   </ItemGroup>
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy /y $(ProjectDir)bin\$(ConfigurationName)\*.nupkg $(SolutionDir)" />
-  </Target>
 </Project>

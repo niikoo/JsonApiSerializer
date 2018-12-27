@@ -23,7 +23,7 @@ namespace JsonApiSerializer.Test.DeserializationTests
         [Trait("Category", "performance")]
         public void When_compared_with_standard_json_deserialization_should_be_comparable()
         {
-            TimeSpan testTime = TimeSpan.FromSeconds(30);
+            var testTime = TimeSpan.FromSeconds(30);
 
             var json = EmbeddedResource.Read("Data.Articles.sample-with-full-link.json");
 
